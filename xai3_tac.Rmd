@@ -1,0 +1,178 @@
+---
+title: "xai3"
+author: "Samuel Mir"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(randomForest)
+library(pdp)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(viridis)
+
+
+set.seed(123)
+```
+```{r}
+bike_data <- read.csv("day.csv")
+```
+
+
+```{r}
+bike_data$date <- as.Date(bike_data$dteday)
+bike_data$days_since_2011 <- as.numeric(bike_data$date - as.Date("2011-01-01"))
+
+
+bike_features <- c("days_since_2011", "temp", "hum", "windspeed", "season", "holiday", "weekday", "workingday")
+bike_target <- "cnt"
+
+
+bike_rf_model <- randomForest(
+  formula = as.formula(paste(bike_target, "~", paste(bike_features, collapse = "+"))),
+  data = bike_data,
+  ntree = 500,
+  importance = TRUE
+)
+
+
+print(bike_rf_model)
+
+
+importance(bike_rf_model)
+varImpPlot(bike_rf_model)
+```
+```{r}
+
+days_pdp <- partial(bike_rf_model, pred.var = "days_since_2011", grid.resolution = 100)
+days_plot <- autoplot(days_pdp, xlab = "Days since 2011", ylab = "Predicted bike count") +
+  theme_minimal() +
+  ggtitle("Effect of Days since 2011 on Predicted Bike Rentals")
+
+
+temp_pdp <- partial(bike_rf_model, pred.var = "temp", grid.resolution = 100)
+temp_plot <- autoplot(temp_pdp, xlab = "Temperature (normalized)", ylab = "Predicted bike count") +
+  theme_minimal() +
+  ggtitle("Effect of Temperature on Predicted Bike Rentals")
+
+
+hum_pdp <- partial(bike_rf_model, pred.var = "hum", grid.resolution = 100)
+hum_plot <- autoplot(hum_pdp, xlab = "Humidity (normalized)", ylab = "Predicted bike count") +
+  theme_minimal() +
+  ggtitle("Effect of Humidity on Predicted Bike Rentals")
+
+
+wind_pdp <- partial(bike_rf_model, pred.var = "windspeed", grid.resolution = 100)
+wind_plot <- autoplot(wind_pdp, xlab = "Wind Speed (normalized)", ylab = "Predicted bike count") +
+  theme_minimal() +
+  ggtitle("Effect of Wind Speed on Predicted Bike Rentals")
+
+
+days_plot
+temp_plot
+hum_plot
+wind_plot
+```
+
+```{r}
+
+sample_size <- min(100, nrow(bike_data))
+bike_sample <- bike_data[sample(nrow(bike_data), sample_size), ]
+
+
+hum_temp_pdp <- partial(
+  bike_rf_model, 
+  pred.var = c("hum", "temp"), 
+  grid.resolution = 40,
+  train = bike_sample  
+)
+
+
+hum_temp_plot <- ggplot(hum_temp_pdp, aes(x = hum, y = temp, fill = yhat)) +
+  geom_tile(width = 0.025, height = 0.025) +  # Set width and height to avoid holes
+  scale_fill_viridis(option = "plasma", name = "Predicted\nBike Count") +
+  theme_minimal() +
+  labs(
+    title = "2D Partial Dependence Plot: Humidity and Temperature",
+    x = "Humidity (normalized)",
+    y = "Temperature (normalized)"
+  )
+
+
+
+
+combined_plot <- ggplot() +
+  geom_tile(data = hum_temp_pdp, aes(x = hum, y = temp, fill = yhat), width = 0.025, height = 0.025) +
+  geom_point(data = bike_sample, aes(x = hum, y = temp), alpha = 0.05, size = 0.5, color = "white") +
+  scale_fill_viridis(option = "plasma", name = "Predicted\nBike Count") +
+  theme_minimal() +
+  labs(
+    title = "2D Partial Dependence with Data Distribution",
+    x = "Humidity (normalized)",
+    y = "Temperature (normalized)"
+  )
+
+print(combined_plot)
+```
+
+
+```{r}
+
+house_data <- read.csv("kc_house_data.csv")
+
+
+house_features <- c("bedrooms", "bathrooms", "sqft_living", "sqft_lot", "floors", "yr_built")
+house_target <- "price"
+
+
+sample_size <- min(500, nrow(house_data))
+house_sample <- house_data[sample(nrow(house_data), sample_size), ]
+
+
+house_rf_model <- randomForest(
+  formula = as.formula(paste(house_target, "~", paste(house_features, collapse = "+"))),
+  data = house_sample,
+  ntree = 500,
+  importance = TRUE
+)
+
+
+print(house_rf_model)
+
+
+importance(house_rf_model)
+varImpPlot(house_rf_model)
+
+
+bedrooms_pdp <- partial(house_rf_model, pred.var = "bedrooms", grid.resolution = 20)
+bedrooms_plot <- autoplot(bedrooms_pdp, xlab = "Number of Bedrooms", ylab = "Predicted House Price") +
+  theme_minimal() +
+  ggtitle("Effect of Number of Bedrooms on Predicted House Price")
+
+
+bathrooms_pdp <- partial(house_rf_model, pred.var = "bathrooms", grid.resolution = 20)
+bathrooms_plot <- autoplot(bathrooms_pdp, xlab = "Number of Bathrooms", ylab = "Predicted House Price") +
+  theme_minimal() +
+  ggtitle("Effect of Number of Bathrooms on Predicted House Price")
+
+
+sqft_living_pdp <- partial(house_rf_model, pred.var = "sqft_living", grid.resolution = 100)
+sqft_living_plot <- autoplot(sqft_living_pdp, xlab = "Living Area (sqft)", ylab = "Predicted House Price") +
+  theme_minimal() +
+  ggtitle("Effect of Living Area on Predicted House Price")
+
+
+floors_pdp <- partial(house_rf_model, pred.var = "floors", grid.resolution = 10)
+floors_plot <- autoplot(floors_pdp, xlab = "Number of Floors", ylab = "Predicted House Price") +
+  theme_minimal() +
+  ggtitle("Effect of Number of Floors on Predicted House Price")
+
+
+print(bedrooms_plot)
+print(bathrooms_plot)
+print(sqft_living_plot)
+print(floors_plot)
+```
+
